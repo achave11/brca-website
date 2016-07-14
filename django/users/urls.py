@@ -1,9 +1,10 @@
-from django.conf.urls import url
+from django.conf.urls import url, include
 from rest_framework_jwt.views import obtain_jwt_token
 
 from . import views
 
 urlpatterns = [
+    #url(r'data/', include('data.urls')),
     url(r'^register/$', views.register, name="register"),
     url(r'^users/$', views.users, name="users"),
     url(r'^token-auth/$', obtain_jwt_token, name="token_auth"),
