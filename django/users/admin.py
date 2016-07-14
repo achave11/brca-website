@@ -24,6 +24,6 @@ class MyUserAdmin(admin.ModelAdmin):
     actions = ('approve',)
 
     def approve(self, request, queryset):
-        queryset.update(is_approved=True)
+        queryset.update(is_approved=False)
 
 admin.site.register(MyUser, MyUserAdmin)

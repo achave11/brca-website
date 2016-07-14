@@ -9,7 +9,10 @@ from django.http import JsonResponse, HttpResponse
 from django.views.decorators.gzip import gzip_page
 
 from .models import Variant
-
+#########################################################
+from ga4gh import variant_service_pb2 as v_s
+from django.core.exceptions import SuspiciousOperation
+#########################################################
 
 @gzip_page
 def index(request):
@@ -78,7 +81,7 @@ def apply_sources(query, include, exclude):
     # the row must match in at least one column
     include_list = (Q(**{column: True}) for column in include)
     exclude_dict = {exclusion: False for exclusion in exclude}
-    
+
     return query.filter(reduce(__or__, include_list)).filter(**exclude_dict)
 
 
@@ -129,7 +132,7 @@ def autocomplete(request):
     cursor = connection.cursor()
 
     cursor.execute(
-        """SELECT word FROM words
+        """"SELECT word FROM words
         WHERE word LIKE %s
         AND char_length(word) >= 3
         ORDER BY word""",
@@ -148,3 +151,43 @@ def sanitise_term(term):
     # Enable prefix search
     term += ":*"
     return term
+
+########################### START WORK #####################################
+def index_num_2(request):
+    variant_set_id = request.POST.get('variantSetId')
+    reference_name = request.POST.get('referenceName')
+    start = request.POST.get('start')
+    end = request.POST.get('end')
+    page_size = request.POST.get('pageSize')
+    page_token = request.POST.get('pageToken')
+
+    valid_resp, Bool = validate_responce(variant_set_id, reference_name, start, end)
+
+    if Bool == False:
+        return valid_resp
+    else:
+        return JsonResponse({'variant_set_id':variant_set_id, 'reference_name':reference_name, 'start':start, 'end': end,'page_size' : page_size ,'page_token' : page_token})
+
+
+def validate_responce(variant_set_id, reference_name, start, end):
+    if variant_set_id == None:
+        return JsonResponse({"error code": "400", "message": "invalid request: variant_set_id"  }), False
+    elif reference_name == None:
+        return JsonResponse({"error code": "400", "message": "invalid request: reference_name"}), False
+    elif start == None or type(start) != int :
+        return JsonResponse({"error code": "400", "message": "invalid request: start"}), False
+    elif end == None:
+        return JsonResponse({"error code": "400", "message": "invalid request: end"}), False
+
+    else:
+        return "PASS", True
+
+def data_response(request):
+    varinat_set_id = request.POST.get('variantSetId')
+    reference_name = request.POST.get('referenceName')
+    start = request.POST.get('start')
+    end = request.POST.get('end')
+    page_token = request.POST.get('pageToken')
+
+    return JsonResponse({'variant_set_id':varinat_set_id, 'reference_name':reference_name, 'start':start, 'end': end, 'page_token' : page_token})
+    #

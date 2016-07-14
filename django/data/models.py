@@ -89,3 +89,5 @@ class Variant(models.Model):
 
     class Meta:
         db_table = 'variant'
+
+#class Phase_3_Release()
