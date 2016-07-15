@@ -19,6 +19,7 @@ from django.test import Client
 c = Client()
 import google.protobuf.json_format as json_format
 from ga4gh import variant_service_pb2 as v_s
+from ga4gh import variants_pb2 as vrs
 
 ##################### MY EDITS END#####################
 
@@ -120,7 +121,7 @@ class VariantTestCase(TestCase):
         result = {unicode('variant_set_id'): unicode("NA21144"), unicode('reference_name'): unicode("RefName###"), unicode('start'): unicode(13), unicode('end'): unicode(13131313), unicode('page_token'): unicode('20')}
         self.assertJSONEqual(resp.content, result)
 
-    def test_validated_varSetId_respone(self):
+    def test_validated_varSetId_request(self):
         request = v_s.SearchVariantsRequest()
 
 
@@ -129,7 +130,7 @@ class VariantTestCase(TestCase):
 
         self.assertJSONEqual(response.content,{"error code": "400", "message": "invalid request: variant_set_id"  } )
 
-    def test_validate_refName_response(self):
+    def test_validate_refName_request(self):
         request = v_s.SearchVariantsRequest()
         request.variant_set_id = "Something not null"
 
@@ -139,7 +140,7 @@ class VariantTestCase(TestCase):
 
         self.assertJSONEqual(response.content, {"error code": "400", "message": "invalid request: reference_name"})
 
-    def test_validate_start_responce(self):
+    def test_validate_start_request(self):
         request = v_s.SearchVariantsRequest()
         request.variant_set_id = "SOME-ID"
         request.reference_name = "SOME-REF-NAME"
@@ -149,7 +150,7 @@ class VariantTestCase(TestCase):
 
         self.assertJSONEqual(responce.content, {"error code": "400", "message": "invalid request: start"})
 
-    def test_validate_end_responce(self):
+    def test_validate_end_request(self):
         request = v_s.SearchVariantsRequest()
         request.variant_set_id = "SOME-ID"
         request.reference_name = "SOME-REF-NAME"
@@ -158,8 +159,33 @@ class VariantTestCase(TestCase):
         Jsonrequest = self.factory.post("data/ga4gh", json_format._MessageToJsonObject(request, False))
         responce = index_num_2(Jsonrequest)
 
-        self.assertJSONEqual(responce.content, {"error code": "400", "message": "invalid request: start"})
+        self.assertJSONEqual(responce.content, {"error code": "400", "message": "invalid request: end"})
 
+    def test_valid_response_returned(self):
+        response = vrs.Variant()
+        response.id = "WyIxa2dlbm9tZXMiLCJ2cyIsInBoYXNlMy1yZWxlYXNlIiwiMTciLCIxMDAxMyIsIjE4NmY4YmU1NzE4NjlkN2NlMzJmODAzZTBkZTI2ZTk1Il0"
+        response.variant_set_id = "WyIxa2dlbm9tZXMiLCJ2cyIsInBoYXNlMy1yZWxlYXNlIl0"
+        response.names.append("rs139738597")
+        response.created = 10
+        response.updated = 0
+        response.reference_name = "17"
+        response.start = 10013
+        response.end = 10014
+        response.reference_bases = "C"
+        response.alternate_bases.append("A")
+        expectedResp = json_format._MessageToJsonObject(response, False)
+
+        request = v_s.SearchVariantsRequest()
+        request.variant_set_id = "SOME-ID"
+        request.reference_name = "SOME-REF-NAME"
+        request.start = 1
+        request.end = 10
+
+
+        Jsonrequest = self.factory.post("data/ga4gh", json_format._MessageToJsonObject(request, False))
+        Jresponse = index_num_2(Jsonrequest)
+
+        self.assertJSONEqual(Jresponse.content, expectedResp)
 
 
 if __name__ == '__main__':
