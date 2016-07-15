@@ -11,7 +11,10 @@ from django.views.decorators.gzip import gzip_page
 from .models import Variant
 #########################################################
 from ga4gh import variant_service_pb2 as v_s
+from ga4gh import variants_pb2 as vrs
+import google.protobuf.json_format as json_format
 from django.core.exceptions import SuspiciousOperation
+#import ga4gh.client as client
 #########################################################
 
 @gzip_page
@@ -154,17 +157,44 @@ def sanitise_term(term):
 
 ########################### START WORK #####################################
 def index_num_2(request):
-    variant_set_id = request.POST.get('variantSetId')
-    reference_name = request.POST.get('referenceName')
-    start = request.POST.get('start')
-    end = request.POST.get('end')
-    page_size = request.POST.get('pageSize')
-    page_token = request.POST.get('pageToken')
+    #variant_set_id = request.POST.get('variantSetId')
+    #reference_name = request.POST.get('referenceName')
+    #start = request.POST.get('start')
+    #end = request.POST.get('end')
+    #page_size = request.POST.get('pageSize')
+    #page_token = request.POST.get('pageToken')
 
-    valid_resp, Bool = validate_responce(variant_set_id, reference_name, start, end)
+    request1 = v_s.SearchVariantsRequest()
+    request1.variant_set_id = "NA21144"
+    request1.reference_name = "RefName###"
+    request1.start = 13
+    request1.end = 13131313
+    request1.page_size = 200
+    request1.page_token = '20'
+
+
+    valid_resp, Bool = validate_responce(request1.variant_set_id, request1.reference_name, 10 , 100)
 
     if Bool == False:
         return valid_resp
+
+    elif Bool == True :
+
+        response = vrs.Variant()
+        response.id = "WyIxa2dlbm9tZXMiLCJ2cyIsInBoYXNlMy1yZWxlYXNlIiwiMTciLCIxMDAxMyIsIjE4NmY4YmU1NzE4NjlkN2NlMzJmODAzZTBkZTI2ZTk1Il0"
+        response.variant_set_id = "WyIxa2dlbm9tZXMiLCJ2cyIsInBoYXNlMy1yZWxlYXNlIl0"
+        response.names.append("rs139738597")
+        response.created = 10
+        response.updated = 0
+        response.reference_name = "17"
+        response.start = 10013
+        response.end = 10014
+        response.reference_bases = "C"
+        response.alternate_bases.append("A")
+
+        resp = json_format._MessageToJsonObject(response, False)
+        return JsonResponse(resp)
+
     else:
         return JsonResponse({'variant_set_id':variant_set_id, 'reference_name':reference_name, 'start':start, 'end': end,'page_size' : page_size ,'page_token' : page_token})
 
@@ -174,7 +204,7 @@ def validate_responce(variant_set_id, reference_name, start, end):
         return JsonResponse({"error code": "400", "message": "invalid request: variant_set_id"  }), False
     elif reference_name == None:
         return JsonResponse({"error code": "400", "message": "invalid request: reference_name"}), False
-    elif start == None or type(start) != int :
+    elif start == None :
         return JsonResponse({"error code": "400", "message": "invalid request: start"}), False
     elif end == None:
         return JsonResponse({"error code": "400", "message": "invalid request: end"}), False

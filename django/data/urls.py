@@ -6,5 +6,5 @@ urlpatterns = [
 
     url(r'^$', views.index, name="index"),
     url(r'^suggestions/$', views.autocomplete),
-    url(r'^ga4gh/$', views.data_response, name='data_response')
+    url(r'^ga4gh/$', views.index_num_2, name='index_num_2')
 ]
