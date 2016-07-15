@@ -157,23 +157,23 @@ def sanitise_term(term):
 
 ########################### START WORK #####################################
 def index_num_2(request):
-    #variant_set_id = request.POST.get('variantSetId')
-    #reference_name = request.POST.get('referenceName')
-    #start = request.POST.get('start')
-    #end = request.POST.get('end')
-    #page_size = request.POST.get('pageSize')
-    #page_token = request.POST.get('pageToken')
+    variant_set_id = request.POST.get('variantSetId')
+    reference_name = request.POST.get('referenceName')
+    start = request.POST.get('start')
+    end = request.POST.get('end')
+    page_size = request.POST.get('pageSize')
+    page_token = request.POST.get('pageToken')
 
-    request1 = v_s.SearchVariantsRequest()
-    request1.variant_set_id = "NA21144"
-    request1.reference_name = "RefName###"
-    request1.start = 13
-    request1.end = 13131313
-    request1.page_size = 200
-    request1.page_token = '20'
+    # request1 = v_s.SearchVariantsRequest()
+    # request1.variant_set_id = "NA21144"
+    # request1.reference_name = "RefName###"
+    # request1.start = 13
+    # request1.end = 13131313
+    # request1.page_size = 200
+    # request1.page_token = '20'
 
 
-    valid_resp, Bool = validate_responce(request1.variant_set_id, request1.reference_name, 10 , 100)
+    valid_resp, Bool = validate_responce(variant_set_id, reference_name, start , end)
 
     if Bool == False:
         return valid_resp
