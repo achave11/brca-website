@@ -10,6 +10,7 @@ from django.views.decorators.gzip import gzip_page
 
 from .models import Variant
 #########################################################
+from django.views.decorators.http import require_http_methods
 from ga4gh import variant_service_pb2 as v_s
 from ga4gh import variants_pb2 as vrs
 import google.protobuf.json_format as json_format
@@ -156,6 +157,9 @@ def sanitise_term(term):
     return term
 
 ########################### START WORK #####################################
+########################### START WORK #####################################
+########################### START WORK #####################################
+@require_http_methods(["POST"])
 def index_num_2(request):
     variant_set_id = request.POST.get('variantSetId')
     reference_name = request.POST.get('referenceName')
@@ -164,14 +168,7 @@ def index_num_2(request):
     page_size = request.POST.get('pageSize')
     page_token = request.POST.get('pageToken')
 
-    # request1 = v_s.SearchVariantsRequest()
-    # request1.variant_set_id = "NA21144"
-    # request1.reference_name = "RefName###"
-    # request1.start = 13
-    # request1.end = 13131313
-    # request1.page_size = 200
-    # request1.page_token = '20'
-
+    response0 = v_s.SearchVariantsResponse()
 
     valid_resp, Bool = validate_responce(variant_set_id, reference_name, start , end)
 
@@ -192,11 +189,44 @@ def index_num_2(request):
         response.reference_bases = "C"
         response.alternate_bases.append("A")
 
-        resp = json_format._MessageToJsonObject(response, False)
+        response0.variants.extend([response])
+        resp = json_format._MessageToJsonObject(response0, False)
         return JsonResponse(resp)
 
     else:
         return JsonResponse({'variant_set_id':variant_set_id, 'reference_name':reference_name, 'start':start, 'end': end,'page_size' : page_size ,'page_token' : page_token})
+
+def brca_to_ga4gh(brca_variant):
+
+    request_response = v_s.SearchVariantsResponse()
+    var_resp = vrs.Variant()
+
+    for j in brca_variant:
+        if j == "Genomic_Coordinate_hg37":
+            var_resp.reference_name, start, bases = brca_variant[j].split(':')
+            var_resp.reference_bases, alternbases = bases.split(">")
+            for i in range(len(alternbases)):
+                var_resp.alternate_bases.append(alternbases[i])
+            var_resp.start = int(start)
+            var_resp.end = var_resp.start+len(alternbases)
+            var_resp.id = "This is ID"
+            var_resp.variant_set_id = "brca_exchange"
+            var_resp.names.append("This are names")
+            var_resp.created = 0
+            var_resp.updated = 0
+        else:
+            var_resp.info[str(j)].append(brca_variant[j])
+    request_response.variants.extend([var_resp])
+
+    return JsonResponse(json_format._MessageToJsonObject(request_response, False))
+
+
+# def ga4gh_brca_page(query, page_size, page_num):
+#     if page_size:
+#         start = page_size * page_num    ######   UP NEXT
+#         end = start + page_size         ######  SETTING UP
+#         return query[start:end]         ######    PAGING
+#     return query
 
 
 def validate_responce(variant_set_id, reference_name, start, end):
@@ -220,4 +250,3 @@ def data_response(request):
     page_token = request.POST.get('pageToken')
 
     return JsonResponse({'variant_set_id':varinat_set_id, 'reference_name':reference_name, 'start':start, 'end': end, 'page_token' : page_token})
-    #

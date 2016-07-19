@@ -11,7 +11,7 @@ from django.test.client import RequestFactory
 from brca import settings
 from data import test_data
 from data.models import Variant
-from data.views import index, autocomplete, data_response, index_num_2
+from data.views import index, autocomplete, data_response, index_num_2, brca_to_ga4gh
 
 ##################### MY EDITS #########################
 
@@ -162,18 +162,22 @@ class VariantTestCase(TestCase):
         self.assertJSONEqual(responce.content, {"error code": "400", "message": "invalid request: end"})
 
     def test_valid_response_returned(self):
-        response = vrs.Variant()
-        response.id = "WyIxa2dlbm9tZXMiLCJ2cyIsInBoYXNlMy1yZWxlYXNlIiwiMTciLCIxMDAxMyIsIjE4NmY4YmU1NzE4NjlkN2NlMzJmODAzZTBkZTI2ZTk1Il0"
-        response.variant_set_id = "WyIxa2dlbm9tZXMiLCJ2cyIsInBoYXNlMy1yZWxlYXNlIl0"
-        response.names.append("rs139738597")
-        response.created = 10
-        response.updated = 0
-        response.reference_name = "17"
-        response.start = 10013
-        response.end = 10014
-        response.reference_bases = "C"
-        response.alternate_bases.append("A")
-        expectedResp = json_format._MessageToJsonObject(response, False)
+        response0 = v_s.SearchVariantsResponse()
+
+        var_resp = vrs.Variant()
+        var_resp.id = "WyIxa2dlbm9tZXMiLCJ2cyIsInBoYXNlMy1yZWxlYXNlIiwiMTciLCIxMDAxMyIsIjE4NmY4YmU1NzE4NjlkN2NlMzJmODAzZTBkZTI2ZTk1Il0"
+        var_resp.variant_set_id = "WyIxa2dlbm9tZXMiLCJ2cyIsInBoYXNlMy1yZWxlYXNlIl0"
+        var_resp.names.append("rs139738597")
+        var_resp.created = 10
+        var_resp.updated = 0
+        var_resp.reference_name = "17"
+        var_resp.start = 10013
+        var_resp.end = 10014
+        var_resp.reference_bases = "C"
+        var_resp.alternate_bases.append("A")
+        response0.variants.extend([var_resp])
+        expectedResp = json_format._MessageToJsonObject(response0, False)
+
 
         request = v_s.SearchVariantsRequest()
         request.variant_set_id = "SOME-ID"
@@ -187,6 +191,37 @@ class VariantTestCase(TestCase):
 
         self.assertJSONEqual(Jresponse.content, expectedResp)
 
+    def test_ga4gh_translator(self):
+        response0 = v_s.SearchVariantsResponse()
+        var_resp = vrs.Variant()
+
+        Resp = Variant.objects.values()[0]
+
+        for j in Resp:
+            if j == "Genomic_Coordinate_hg37":
+                var_resp.reference_name, start, bases = Resp[j].split(':')
+                var_resp.reference_bases, alternbases = bases.split(">")
+                for i in range(len(alternbases)):
+                    var_resp.alternate_bases.append(alternbases[i])
+                var_resp.start = int(start)
+                var_resp.end = var_resp.start + len(alternbases)
+                var_resp.id = "This is ID"
+                var_resp.variant_set_id = "brca_exchange"
+                var_resp.names.append("This are names")
+                var_resp.created = 0
+                var_resp.updated = 0
+            else:
+                var_resp.info[str(j)].append(Resp[j])
+        response0.variants.extend([var_resp])
+
+        expectedResp = json_format._MessageToJsonObject(response0, False)
+
+        request = Variant.objects.values()[0]
+        Jresponse = brca_to_ga4gh(request)
+
+        self.assertJSONEqual(Jresponse.content, expectedResp)
+
+    #def tets_GA4GH_translator(self):
 
 if __name__ == '__main__':
     unittest.main()
