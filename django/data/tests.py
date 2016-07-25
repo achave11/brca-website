@@ -11,7 +11,7 @@ from django.test.client import RequestFactory
 from brca import settings
 from data import test_data
 from data.models import Variant
-from data.views import index, autocomplete, data_response, index_num_2
+from data.views import index, autocomplete, index_num_2, brca_to_ga4gh, ErrorMessages
 
 ##################### MY EDITS #########################
 
@@ -96,97 +96,66 @@ class VariantTestCase(TestCase):
 ###################################################################################
 ############################# NEW TESTS START #####################################
     def test_ga4gh_variants_status_code(self):
-
-        """" Getting a 200 status code returned !"""
-
-        request0 =  self.factory.post("/data/ga4gh")#v0.6.5a/variants")
-        response = data_response(request0)
-
+        request0 =  self.factory.post(
+            "/data/ga4gh", json.dumps({"end": 51425158029, "referenceName": "chr17", "variantSetId": "brca1", "start": 51425158, "pageSize": 5 }), content_type="application/json")
+        response = index_num_2(request0)
         self.assertEqual(response.status_code, 200)
 
-    def test_ga4gh_json_response(self):
 
+
+    def test_ga4gh_translator(self):
+        var_resp = vrs.Variant()
+        resp = Variant.objects.values()[0]
+        for j in resp:
+            if j == "Genomic_Coordinate_hg37":
+                var_resp.reference_name, start, bases = resp[j].split(':')
+                var_resp.reference_bases, alternbases = bases.split(">")
+                for i in range(len(alternbases)):
+                    var_resp.alternate_bases.append(alternbases[i])
+                var_resp.start = int(start)
+                var_resp.end = var_resp.start + len(alternbases)
+                continue
+            if j == "id":
+                var_resp.id = str(resp['id'])
+                var_resp.variant_set_id = "brca_exchange_hg37"
+                var_resp.names.append("This are names")
+                var_resp.created = 0
+                var_resp.updated = 0
+                continue
+            else:
+                var_resp.info[str(j)].append(resp[j])
+
+        expectedResp = json.dumps(json_format._MessageToJsonObject(var_resp, False))
+        jresponse = json.dumps(json_format._MessageToJsonObject(brca_to_ga4gh(resp), False))
+        self.assertJSONEqual(jresponse , expectedResp)
+
+    def test_validated_request(self):
         request = v_s.SearchVariantsRequest()
-        request.variant_set_id = "NA21144"
-        request.reference_name = "RefName###"
-        request.start = 13
-        request.end = 13131313
-        request.page_size = 200
-        request.page_token = '20'
-        json_req = json_format._MessageToJsonObject(request, True)
-
-        req = self.factory.post("/data/ga4gh", json_req)
-        resp = data_response(req)
-
-        result = {unicode('variant_set_id'): unicode("NA21144"), unicode('reference_name'): unicode("RefName###"), unicode('start'): unicode(13), unicode('end'): unicode(13131313), unicode('page_token'): unicode('20')}
-        self.assertJSONEqual(resp.content, result)
-
-    def test_validated_varSetId_request(self):
-        request = v_s.SearchVariantsRequest()
-
-
-        req = self.factory.post("/data/ga4gh", json_format._MessageToJsonObject(request, False))
+        req = self.factory.post("/data/ga4gh", json.dumps(json_format._MessageToJsonObject(request, False)),
+                                content_type="application/json")
         response = index_num_2(req)
+        self.assertJSONEqual(response.content, ErrorMessages['VariantSetId'])
 
-        self.assertJSONEqual(response.content,{"error code": "400", "message": "invalid request: variant_set_id"  } )
-
-    def test_validate_refName_request(self):
-        request = v_s.SearchVariantsRequest()
         request.variant_set_id = "Something not null"
-
-
-        req = self.factory.post("data/ga4gh", json_format._MessageToJsonObject(request, False) )
+        req = self.factory.post("/data/ga4gh", json.dumps(json_format._MessageToJsonObject(request, False)),
+                                content_type="application/json")
         response = index_num_2(req)
+        self.assertJSONEqual(response.content, ErrorMessages['referenceName'])
 
-        self.assertJSONEqual(response.content, {"error code": "400", "message": "invalid request: reference_name"})
+        request.reference_name = "chr17"
+        req= self.factory.post("/data/ga4gh", json.dumps(json_format._MessageToJsonObject(request, False)),
+                                content_type="application/json")
+        response = index_num_2(req)
+        self.assertJSONEqual(response.content, ErrorMessages['start'])
 
-    def test_validate_start_request(self):
-        request = v_s.SearchVariantsRequest()
-        request.variant_set_id = "SOME-ID"
-        request.reference_name = "SOME-REF-NAME"
+        request.start = 14589
+        req = self.factory.post("/data/ga4gh", json.dumps(json_format._MessageToJsonObject(request, False)),
+                                content_type="application/json")
+        response = index_num_2(req)
+        self.assertJSONEqual(response.content, ErrorMessages['end'])
 
-        Jsonrequest = self.factory.post("data/ga4gh", json_format._MessageToJsonObject(request, False))
-        responce = index_num_2(Jsonrequest)
-
-        self.assertJSONEqual(responce.content, {"error code": "400", "message": "invalid request: start"})
-
-    def test_validate_end_request(self):
-        request = v_s.SearchVariantsRequest()
-        request.variant_set_id = "SOME-ID"
-        request.reference_name = "SOME-REF-NAME"
-        request.start = 1
-
-        Jsonrequest = self.factory.post("data/ga4gh", json_format._MessageToJsonObject(request, False))
-        responce = index_num_2(Jsonrequest)
-
-        self.assertJSONEqual(responce.content, {"error code": "400", "message": "invalid request: end"})
-
-    def test_valid_response_returned(self):
-        response = vrs.Variant()
-        response.id = "WyIxa2dlbm9tZXMiLCJ2cyIsInBoYXNlMy1yZWxlYXNlIiwiMTciLCIxMDAxMyIsIjE4NmY4YmU1NzE4NjlkN2NlMzJmODAzZTBkZTI2ZTk1Il0"
-        response.variant_set_id = "WyIxa2dlbm9tZXMiLCJ2cyIsInBoYXNlMy1yZWxlYXNlIl0"
-        response.names.append("rs139738597")
-        response.created = 10
-        response.updated = 0
-        response.reference_name = "17"
-        response.start = 10013
-        response.end = 10014
-        response.reference_bases = "C"
-        response.alternate_bases.append("A")
-        expectedResp = json_format._MessageToJsonObject(response, False)
-
-        request = v_s.SearchVariantsRequest()
-        request.variant_set_id = "SOME-ID"
-        request.reference_name = "SOME-REF-NAME"
-        request.start = 1
-        request.end = 10
-
-
-        Jsonrequest = self.factory.post("data/ga4gh", json_format._MessageToJsonObject(request, False))
-        Jresponse = index_num_2(Jsonrequest)
-
-        self.assertJSONEqual(Jresponse.content, expectedResp)
-
+    def test_pagging(self):
+        hibye = ""
 
 if __name__ == '__main__':
     unittest.main()

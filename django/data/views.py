@@ -1,6 +1,7 @@
 import os
 import re
 import tempfile
+import json
 from operator import __or__
 
 from django.db import connection
@@ -10,11 +11,11 @@ from django.views.decorators.gzip import gzip_page
 
 from .models import Variant
 #########################################################
+from django.views.decorators.http import require_http_methods
 from ga4gh import variant_service_pb2 as v_s
 from ga4gh import variants_pb2 as vrs
 import google.protobuf.json_format as json_format
-from django.core.exceptions import SuspiciousOperation
-#import ga4gh.client as client
+
 #########################################################
 
 @gzip_page
@@ -135,7 +136,7 @@ def autocomplete(request):
     cursor = connection.cursor()
 
     cursor.execute(
-        """"SELECT word FROM words
+        """SELECT word FROM words
         WHERE word LIKE %s
         AND char_length(word) >= 3
         ORDER BY word""",
@@ -155,69 +156,94 @@ def sanitise_term(term):
     term += ":*"
     return term
 
-########################### START WORK #####################################
+########################### START WORK ####################################
+###########################################################################
+###########################################################################
+end_index = None
+@require_http_methods(["POST"])
 def index_num_2(request):
-    variant_set_id = request.POST.get('variantSetId')
-    reference_name = request.POST.get('referenceName')
-    start = request.POST.get('start')
-    end = request.POST.get('end')
-    page_size = request.POST.get('pageSize')
-    page_token = request.POST.get('pageToken')
-
-    # request1 = v_s.SearchVariantsRequest()
-    # request1.variant_set_id = "NA21144"
-    # request1.reference_name = "RefName###"
-    # request1.start = 13
-    # request1.end = 13131313
-    # request1.page_size = 200
-    # request1.page_token = '20'
-
-
-    valid_resp, Bool = validate_responce(variant_set_id, reference_name, start , end)
-
-    if Bool == False:
-        return valid_resp
-
-    elif Bool == True :
-
-        response = vrs.Variant()
-        response.id = "WyIxa2dlbm9tZXMiLCJ2cyIsInBoYXNlMy1yZWxlYXNlIiwiMTciLCIxMDAxMyIsIjE4NmY4YmU1NzE4NjlkN2NlMzJmODAzZTBkZTI2ZTk1Il0"
-        response.variant_set_id = "WyIxa2dlbm9tZXMiLCJ2cyIsInBoYXNlMy1yZWxlYXNlIl0"
-        response.names.append("rs139738597")
-        response.created = 10
-        response.updated = 0
-        response.reference_name = "17"
-        response.start = 10013
-        response.end = 10014
-        response.reference_bases = "C"
-        response.alternate_bases.append("A")
-
-        resp = json_format._MessageToJsonObject(response, False)
-        return JsonResponse(resp)
+    conditional = validate_request(request)
+    if conditional :
+        return conditional
 
     else:
-        return JsonResponse({'variant_set_id':variant_set_id, 'reference_name':reference_name, 'start':start, 'end': end,'page_size' : page_size ,'page_token' : page_token})
+        req_dict = json.loads(request.body)
+        variant_set_id = req_dict.get('variantSetId')
+        reference_name = req_dict.get('referenceName')
+        start = req_dict.get('start')
+        end = req_dict.get('end')
+        page_size = req_dict.get('pageSize', 1)
+        page_token = req_dict.get('pageToken', "0")
 
+    response0 = v_s.SearchVariantsResponse()
 
-def validate_responce(variant_set_id, reference_name, start, end):
-    if variant_set_id == None:
-        return JsonResponse({"error code": "400", "message": "invalid request: variant_set_id"  }), False
-    elif reference_name == None:
-        return JsonResponse({"error code": "400", "message": "invalid request: reference_name"}), False
-    elif start == None :
-        return JsonResponse({"error code": "400", "message": "invalid request: start"}), False
-    elif end == None:
-        return JsonResponse({"error code": "400", "message": "invalid request: end"}), False
-
+    filt = str(reference_name)+":"
+    DbResp = Variant.objects
+    DbResp = DbResp.filter(Genomic_Coordinate_hg37__startswith=filt)
+    ret_data = ga4gh_brca_page(DbResp, int(page_size), int(page_token))
+    ga_vars = [brca_to_ga4gh(i) for i in ret_data.values()]
+    if len(ga_vars) > page_size:
+        ga_vars.pop()
+        page_token = str(1 + int(page_token))
     else:
-        return "PASS", True
+        response0.next_page_token = ""
+    response0.variants.extend(ga_vars)
+    response0.next_page_token = page_token
+    resp = json_format._MessageToJsonObject(response0, True)
+    return JsonResponse(resp)
 
-def data_response(request):
-    varinat_set_id = request.POST.get('variantSetId')
-    reference_name = request.POST.get('referenceName')
-    start = request.POST.get('start')
-    end = request.POST.get('end')
-    page_token = request.POST.get('pageToken')
+def ga4gh_brca_page(query, page_size, page_token):
+    start = page_size * page_token
+    end = start + page_size+1
+    return query[start:end]
 
-    return JsonResponse({'variant_set_id':varinat_set_id, 'reference_name':reference_name, 'start':start, 'end': end, 'page_token' : page_token})
-    #
+def brca_to_ga4gh(brca_variant):
+    var_resp = vrs.Variant()
+    for j in brca_variant:
+        if j == "Genomic_Coordinate_hg37":
+            var_resp.reference_name, start, bases = brca_variant[j].split(':')
+            var_resp.reference_bases, alternbases = bases.split(">")
+            for i in range(len(alternbases)):
+                var_resp.alternate_bases.append(alternbases[i])
+            var_resp.start = int(start)
+            var_resp.end = var_resp.start+len(alternbases)
+            continue
+        if j == "id":
+            var_resp.id = str(brca_variant['id'])
+            var_resp.variant_set_id = "brca_exchange_hg37"
+            var_resp.names.append("This are names")
+            var_resp.created = 0
+            var_resp.updated = 0
+            continue
+        else:
+            var_resp.info[str(j)].append(brca_variant[j])
+
+    return var_resp
+
+def validate_request(request):
+    request
+    if not request.body:
+        return JsonResponse(ErrorMessages['emptyBody'])
+            #{"error code": "400", "message": "invalid request: empty request"  }),
+    else:
+        request_dict = json.loads(request.body)
+        if not request_dict.get("variantSetId"):
+            return JsonResponse(ErrorMessages['VariantSetId'])
+            #return JsonResponse({'error code': "400", 'message': "invalid request: variant_set_id" })
+        elif not request_dict.get('referenceName'):
+            return JsonResponse(ErrorMessages['referenceName'])
+            #{"error code": "400", "message": "invalid request: reference_name"})
+        elif not request_dict.get('start')  :
+            return JsonResponse(ErrorMessages['start'])
+                #{"error code": "400", "message": "invalid request: start"})
+        elif not request_dict.get('end') :
+            return JsonResponse(ErrorMessages['end'])
+                #{"error code": "400", "message": "invalid request: end"})
+        else:
+            return None
+
+ErrorMessages = {'emptyBody' :{'error code': 400, 'message' : 'invalid request empty request'},
+                'VariantSetId' : {'error code': 400, 'message': 'invalid request variant_set_id'},
+                 'referenceName': {'error code': 400, 'message': 'invalid request reference_name'},
+                 'start': {'error code' : 400, 'message': 'invalid request start'},
+                 'end' : {'error code' :400, 'message': 'invalid request end'}}
