@@ -159,6 +159,7 @@ def sanitise_term(term):
 ########################### START WORK ####################################
 ###########################################################################
 ###########################################################################
+
 end_index = None
 @require_http_methods(["POST"])
 def index_num_2(request):
@@ -197,6 +198,15 @@ def ga4gh_brca_page(query, page_size, page_token):
     end = start + page_size+1
     return query[start:end]
 
+def get_offset(start, end, VarLEn = None):
+    if VarLEn:
+        start = start - 1
+        end = start + len(VarLEn)
+    else:
+        start = start + 1
+        end = end + 1
+    return start, end
+
 def brca_to_ga4gh(brca_variant):
     var_resp = vrs.Variant()
     for j in brca_variant:
@@ -221,24 +231,18 @@ def brca_to_ga4gh(brca_variant):
     return var_resp
 
 def validate_request(request):
-    request
     if not request.body:
         return JsonResponse(ErrorMessages['emptyBody'])
-            #{"error code": "400", "message": "invalid request: empty request"  }),
     else:
         request_dict = json.loads(request.body)
         if not request_dict.get("variantSetId"):
             return JsonResponse(ErrorMessages['VariantSetId'])
-            #return JsonResponse({'error code': "400", 'message': "invalid request: variant_set_id" })
         elif not request_dict.get('referenceName'):
             return JsonResponse(ErrorMessages['referenceName'])
-            #{"error code": "400", "message": "invalid request: reference_name"})
         elif not request_dict.get('start')  :
             return JsonResponse(ErrorMessages['start'])
-                #{"error code": "400", "message": "invalid request: start"})
         elif not request_dict.get('end') :
             return JsonResponse(ErrorMessages['end'])
-                #{"error code": "400", "message": "invalid request: end"})
         else:
             return None
 
@@ -246,4 +250,70 @@ ErrorMessages = {'emptyBody' :{'error code': 400, 'message' : 'invalid request e
                 'VariantSetId' : {'error code': 400, 'message': 'invalid request variant_set_id'},
                  'referenceName': {'error code': 400, 'message': 'invalid request reference_name'},
                  'start': {'error code' : 400, 'message': 'invalid request start'},
-                 'end' : {'error code' :400, 'message': 'invalid request end'}}
+                 'end' : {'error code' :400, 'message': 'invalid request end'},
+                 'datasetId': {'error code' : 400, 'message': 'invalid request dataset_id'}}
+
+@require_http_methods(["GET"])
+def get_var_by_id(request, variant_id):
+    gen_coor_and_id = variant_id
+    gen_coor, v_id = gen_coor_and_id.split("-")
+
+    DbResp = Variant.objects.values()
+    resp1 = DbResp.get(id=int(v_id))
+    Var_resp = brca_to_ga4gh(resp1)
+    resp = json_format._MessageToJsonObject(Var_resp, True)
+
+    return JsonResponse(resp)
+
+def validate_varsetreq(request):
+    if not request.body:
+        return JsonResponse(ErrorMessages['emptyBody'])
+    else:
+        request_dict = json.loads(request.body)
+        if not request_dict.get("datasetId"):
+            return JsonResponse(ErrorMessages['datasetId'])
+        else:
+            return None
+
+@require_http_methods(["POST"])
+def get_variantSet(request):
+    condit = validate_varsetreq(request)
+
+    if condit:
+        return condit
+    else:
+        req_dict = json.loads(request.body)
+        dataset_id = req_dict.get('datasetId')
+        page_size = req_dict.get('pageSize', 3)
+        page_token = req_dict.get('pageToken', '0')
+
+    response1 = v_s.SearchVariantSetsResponse()
+    response1.next_page_token = page_token
+    response = vrs.VariantSet()
+    response.id = "brca_exchange_hg37"
+    response.name = "brca_exchange_hg37"
+    response.dataset_id = "brca_exchange"
+    response.reference_set_id = "Genomic_Coordinate_hg37"
+
+    brca_meta(response.metadata)
+    response1.variant_sets.extend([response])
+    resp = json_format._MessageToJsonObject(response1, True)
+    return JsonResponse(resp)
+
+
+def brca_meta(XYZXYZ):
+
+    var_resp = vrs.VariantSetMetadata()
+    for j in Variant._meta.get_all_field_names():
+        var_resp.key = str(j)
+        var_resp.value = "-"
+        var_resp.id = "brca_hg37-"+str(j)
+        var_resp.type = Variant._meta.get_field(str(j)).get_internal_type()
+        var_resp.number = "-"
+        var_resp.description = "refer to ->"+str(j)+ " in https://github.com/BD2KGenomics/brca-website/blob/master/content/help_research.md"
+        XYZXYZ.extend([var_resp])
+    return XYZXYZ
+
+GenCoorDict = {"hg36" : "Genomic_Coordinate_hg36",
+               "hg37" : "Genomic_Coordinate_hg37",
+               "hg39" : "Genomic_Coordinate_hg39"}
