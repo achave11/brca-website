@@ -1,0 +1,8 @@
+LOG:  database system was interrupted; last known up at 2016-07-26 16:08:22 PDT
+LOG:  database system was not properly shut down; automatic recovery in progress
+LOG:  invalid record length at 5/42E83188
+LOG:  redo is not required
+LOG:  MultiXact member wraparound protections are now enabled
+LOG:  database system is ready to accept connections
+LOG:  autovacuum launcher started
+FATAL:  terminating autovacuum process due to administrator command

@@ -247,23 +247,28 @@ def validate_request(request):
             return None
 
 ErrorMessages = {'emptyBody' :{'error code': 400, 'message' : 'invalid request empty request'},
-                'VariantSetId' : {'error code': 400, 'message': 'invalid request variant_set_id'},
-                 'referenceName': {'error code': 400, 'message': 'invalid request reference_name'},
-                 'start': {'error code' : 400, 'message': 'invalid request start'},
-                 'end' : {'error code' :400, 'message': 'invalid request end'},
-                 'datasetId': {'error code' : 400, 'message': 'invalid request dataset_id'}}
+                'VariantSetId' : {'error code': 400, 'message': 'invalid request no variant_set_id'},
+                 'referenceName': {'error code': 400, 'message': 'invalid reques no reference_name'},
+                 'start': {'error code' : 400, 'message': 'invalid request no start'},
+                 'end' : {'error code' :400, 'message': 'invalid request no end'},
+                 'datasetId': {'error code' : 400, 'message': 'invalid request no dataset_id'},
+                 'variantId': {'error code' : 400, 'message': 'invalid request no variant_id'},
+                 'variantSetId': {'error code': 400, 'message': 'invalid request no variant_set_id'}}
 
 @require_http_methods(["GET"])
 def get_var_by_id(request, variant_id):
-    gen_coor_and_id = variant_id
-    gen_coor, v_id = gen_coor_and_id.split("-")
+    if not variant_id:
+        return JsonResponse(ErrorMessages['variantId'])
+    else:
+        gen_coor_and_id = variant_id
+        gen_coor, v_id = gen_coor_and_id.split("-")
 
-    DbResp = Variant.objects.values()
-    resp1 = DbResp.get(id=int(v_id))
-    Var_resp = brca_to_ga4gh(resp1)
-    resp = json_format._MessageToJsonObject(Var_resp, True)
+        DbResp = Variant.objects.values()
+        resp1 = DbResp.get(id=int(v_id))
+        Var_resp = brca_to_ga4gh(resp1)
+        resp = json_format._MessageToJsonObject(Var_resp, True)
 
-    return JsonResponse(resp)
+        return JsonResponse(resp)
 
 def validate_varsetreq(request):
     if not request.body:
@@ -290,30 +295,47 @@ def get_variantSet(request):
     response1 = v_s.SearchVariantSetsResponse()
     response1.next_page_token = page_token
     response = vrs.VariantSet()
-    response.id = "brca_exchange_hg37"
-    response.name = "brca_exchange_hg37"
-    response.dataset_id = "brca_exchange"
-    response.reference_set_id = "Genomic_Coordinate_hg37"
+    response.id = datasetId+"-"+dataset_id
+    response.name = name+"-"+dataset_id
+    response.dataset_id =  name
+    response.reference_set_id = referenceSetId+"-"+dataset_id
 
-    brca_meta(response.metadata)
+    brca_meta(response.metadata, dataset_id)
     response1.variant_sets.extend([response])
     resp = json_format._MessageToJsonObject(response1, True)
     return JsonResponse(resp)
 
 
-def brca_meta(XYZXYZ):
+def brca_meta(XYZXYZ, dataset_id):
 
     var_resp = vrs.VariantSetMetadata()
     for j in Variant._meta.get_all_field_names():
         var_resp.key = str(j)
         var_resp.value = "-"
-        var_resp.id = "brca_hg37-"+str(j)
+        var_resp.id = datasetId+"-"+dataset_id+"-"+str(j)
         var_resp.type = Variant._meta.get_field(str(j)).get_internal_type()
         var_resp.number = "-"
         var_resp.description = "refer to ->"+str(j)+ " in https://github.com/BD2KGenomics/brca-website/blob/master/content/help_research.md"
         XYZXYZ.extend([var_resp])
     return XYZXYZ
 
-GenCoorDict = {"hg36" : "Genomic_Coordinate_hg36",
-               "hg37" : "Genomic_Coordinate_hg37",
-               "hg39" : "Genomic_Coordinate_hg39"}
+datasetId = "brca"
+referenceSetId = "Genomic_Coordinate"
+name = "brca_exchange"
+SetIds = ["hg36", "hg37", "hg38"]
+@require_http_methods(["GET"])
+def get_varset_by_id(request, variantSetId):
+    if not variantSetId:
+        return JsonResponse(ErrorMessages["variantSetId"])
+    dataset, Id = variantSetId.split("-")
+    if Id in SetIds:
+        response = vrs.VariantSet()
+        response.id = dataset + "-" + Id
+        response.name = name + "-" + Id
+        response.dataset_id = name
+        response.reference_set_id = referenceSetId + "-" + Id
+        brca_meta(response.metadata, Id)
+        resp = json_format._MessageToJsonObject(response, False)
+        return JsonResponse(resp)
+    else:
+        return JsonResponse({"Invalid Set Id": Id})
