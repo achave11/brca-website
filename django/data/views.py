@@ -306,7 +306,7 @@ def get_variantSet(request):
     return JsonResponse(resp)
 
 
-def brca_meta(XYZXYZ, dataset_id):
+def brca_meta(Metadata, dataset_id):
 
     var_resp = vrs.VariantSetMetadata()
     for j in Variant._meta.get_all_field_names():
@@ -316,17 +316,20 @@ def brca_meta(XYZXYZ, dataset_id):
         var_resp.type = Variant._meta.get_field(str(j)).get_internal_type()
         var_resp.number = "-"
         var_resp.description = "refer to ->"+str(j)+ " in https://github.com/BD2KGenomics/brca-website/blob/master/content/help_research.md"
-        XYZXYZ.extend([var_resp])
-    return XYZXYZ
+        Metadata.extend([var_resp])
+    return Metadata
 
 datasetId = "brca"
 referenceSetId = "Genomic_Coordinate"
 name = "brca_exchange"
 SetIds = ["hg36", "hg37", "hg38"]
+
 @require_http_methods(["GET"])
 def get_varset_by_id(request, variantSetId):
-    if not variantSetId:
+
+    if not variantSetId :
         return JsonResponse(ErrorMessages["variantSetId"])
+
     dataset, Id = variantSetId.split("-")
     if Id in SetIds:
         response = vrs.VariantSet()
@@ -339,3 +342,11 @@ def get_varset_by_id(request, variantSetId):
         return JsonResponse(resp)
     else:
         return JsonResponse({"Invalid Set Id": Id})
+
+@require_http_methods(["GET", "POST"])
+def varsetId_empty_catcher(request):
+    return JsonResponse(ErrorMessages["emptyBody"])
+
+@require_http_methods(["GET", "POST"])
+def empty_varId_catcher(request):
+    return JsonResponse(ErrorMessages["emptyBody"])
