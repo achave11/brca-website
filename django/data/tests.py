@@ -11,10 +11,10 @@ from django.test.client import RequestFactory
 from brca import settings
 from data import test_data
 from data.models import Variant
-from data.views import index, autocomplete, index_num_2, brca_to_ga4gh, ErrorMessages
+from data.views import index, autocomplete
 
 ##################### MY EDITS #########################
-
+from data.views import index_num_2, brca_to_ga4gh, ErrorMessages, get_offset, get_var_by_id, get_variantSet, get_varset_by_id, varsetId_empty_catcher, empty_varId_catcher
 from django.test import Client
 c = Client()
 import google.protobuf.json_format as json_format
@@ -67,7 +67,7 @@ class VariantTestCase(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertJSONEqual(response.content, {"count": 1, "data": [test_data.existing_variant()]})
 
-    @unittest.skip("Not Passing")
+    #@unittest.skip("Not Passing")
     def test_autocomplete_nucleotide(self):
         """Getting autocomplete suggestions for words starting with c.2123 should return 2 results"""
         search_term = quote('c.2123')
@@ -79,7 +79,7 @@ class VariantTestCase(TestCase):
         self.assertIsInstance(response, JsonResponse)
         self.assertEqual(response.status_code, 200)
         self.assertJSONEqual(response.content, {"suggestions": expected_autocomplete_results})
-    @unittest.skip("Not Passing")
+    #@unittest.skip("Not Passing")
     def test_autocomplete_bic(self):
         """Getting autocomplete suggestions for words starting with IVS7+10 should return 2 results"""
         search_term = quote('ivs7+10')
@@ -97,7 +97,7 @@ class VariantTestCase(TestCase):
 ############################# NEW TESTS START #####################################
     def test_ga4gh_variants_status_code(self):
         request0 =  self.factory.post(
-            "/data/ga4gh", json.dumps({"end": 51425158029, "referenceName": "chr17", "variantSetId": "brca1", "start": 51425158, "pageSize": 5 }), content_type="application/json")
+            "/data/ga4gh/variants/search", json.dumps({"end": 51425158029, "referenceName": "chr17", "variantSetId": "brca1", "start": 51425158, "pageSize": 5 }), content_type="application/json")
         response = index_num_2(request0)
         self.assertEqual(response.status_code, 200)
 
@@ -131,31 +131,104 @@ class VariantTestCase(TestCase):
 
     def test_validated_request(self):
         request = v_s.SearchVariantsRequest()
-        req = self.factory.post("/data/ga4gh", json.dumps(json_format._MessageToJsonObject(request, False)),
+        req = self.factory.post("/data/ga4gh/variants/search", json.dumps(json_format._MessageToJsonObject(request, False)),
                                 content_type="application/json")
         response = index_num_2(req)
         self.assertJSONEqual(response.content, ErrorMessages['VariantSetId'])
 
         request.variant_set_id = "Something not null"
-        req = self.factory.post("/data/ga4gh", json.dumps(json_format._MessageToJsonObject(request, False)),
+        req = self.factory.post("/data/ga4gh/variants/search", json.dumps(json_format._MessageToJsonObject(request, False)),
                                 content_type="application/json")
         response = index_num_2(req)
         self.assertJSONEqual(response.content, ErrorMessages['referenceName'])
 
         request.reference_name = "chr17"
-        req= self.factory.post("/data/ga4gh", json.dumps(json_format._MessageToJsonObject(request, False)),
+        req= self.factory.post("/data/ga4gh/variants/search", json.dumps(json_format._MessageToJsonObject(request, False)),
                                 content_type="application/json")
         response = index_num_2(req)
         self.assertJSONEqual(response.content, ErrorMessages['start'])
 
         request.start = 14589
-        req = self.factory.post("/data/ga4gh", json.dumps(json_format._MessageToJsonObject(request, False)),
+        req = self.factory.post("/data/ga4gh/variants/search", json.dumps(json_format._MessageToJsonObject(request, False)),
                                 content_type="application/json")
         response = index_num_2(req)
         self.assertJSONEqual(response.content, ErrorMessages['end'])
 
-    def test_pagging(self):
-        hibye = ""
+    def test_offset_calculator(self):
+        start = 12500
+        end = 13000
+        s1, e1 = get_offset(start, end) #Ending offset is the same, the query will be exclusive, and therefore query will satisfy type, that is inclusive.
+        self.assertEquals(s1, start+1)
+        self.assertEquals(e1, end+1)
+        opperlen = ['a','b']
+        s2, e2 = get_offset(start, end, opperlen)
+        self.assertEquals(s2, start - 1)
+        self.assertEquals(e2, s2+2)
+
+    def test_pagging_token(self):
+        request0 = self.factory.post(
+            "/data/ga4gh/variants/search", json.dumps(
+                {"end": 51425158029, "referenceName": "chr17", "variantSetId": "brca1", "start": 51425158,
+                 "pageSize": 5}), content_type="application/json")
+        response = index_num_2(request0)
+        self.assertEqual(json.loads(response.content)["nextPageToken"], "1" )
+
+        request0 = self.factory.post(
+            "/data/ga4gh/variants/search", json.dumps(
+                {"end": 51425158029, "referenceName": "chr17", "variantSetId": "brca1", "start": 51425158,
+                 "pageSize": 5, "pageToken": "3"}), content_type="application/json", )
+        response = index_num_2(request0)
+        self.assertEqual(json.loads(response.content)["nextPageToken"], "4")
+        self.assertEquals(len(json.loads(response.content)["variants"]), 5)
+
+    def test_get_variant_response(self):
+        request = self.factory.get("/data/ga4gh/variants/hg37-1")
+        response = get_var_by_id(request, "hg37-1")
+        jsonresp = json.loads(response.content)
+        self.assertEqual(jsonresp["referenceName"], "chr13")
+        self.assertEqual(jsonresp["start"], "32923951")
+
+    def test_brca_to_ga4gh_variantSets_status_code(self):
+        request0 = self.factory.post(
+            "/data/ga4gh/variants/search", json.dumps({"datasetId": "hg37"}), content_type="application/json")
+        response = get_variantSet(request0)
+        self.assertEqual(response.status_code, 200)
+
+    def test_brca_to_ga4gh_variantSets_metafieldNums(self):
+        request0 = self.factory.post(
+            "/data/ga4gh/variants/search", json.dumps({"datasetId": "hg37"}), content_type="application/json")
+        response = get_variantSet(request0)
+        self.assertEqual(len(json.loads(response.content)["variantSets"][0]["metadata"]), 76)
+
+    def test_variantSets_fields(self):
+        request0 = self.factory.post(
+            "/data/ga4gh/variants/search", json.dumps({"datasetId": "hg37"}), content_type="application/json")
+        response = get_variantSet(request0)
+        Comp = json.loads(response.content)["variantSets"][0]
+
+        """Comparative fields returned by request's responce"""
+        self.assertEqual(Comp["referenceSetId"], "Genomic_Coordinate-hg37")
+        self.assertEqual(Comp["datasetId"], "brca_exchange")
+        self.assertEqual(Comp["name"], "brca_exchange-hg37")
+
+        """Next Page Token Field"""
+        self.assertEquals(json.loads(response.content)["nextPageToken"], '0')
+
+
+    def test_get_variantSet_by_id(self):
+        request = self.factory.get("/data/ga4gh/variantsets/brca-hg37")
+        response = get_varset_by_id(request, "brca-hg37")
+        jsonresp = json.loads(response.content)
+        self.assertEquals(jsonresp["referenceSetId"], "Genomic_Coordinate-hg37")
+        self.assertEquals(jsonresp["id"], "brca-hg37")
+
+    def test_empty_request(self):
+        request0 = self.factory.get("data/ga4gh/variantsets")
+        request1 = self.factory.get("data/ga4gh/variants")
+        response0 = varsetId_empty_catcher(request0)
+        response1 = empty_varId_catcher(request1)
+        self.assertJSONEqual(response0.content,{'error code': 400, 'message' : 'invalid request empty request'})
+        self.assertJSONEqual(response1.content, {'error code': 400, 'message': 'invalid request empty request'})
 
 if __name__ == '__main__':
     unittest.main()
